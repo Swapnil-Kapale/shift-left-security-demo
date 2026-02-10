@@ -38,6 +38,13 @@ jobs:
           echo "Starting application for sanity check..."
           timeout 5s node index.js || true
           echo "Sanity check completed"
+      
+      # -----------------------------
+      # Layer 1: Hardcoded Secret Detection (Hard Fail)
+      # -----------------------------
+      - name: Scan for hardcoded secrets (Layer 1)
+        run: npm run secret-scan
+
 
       # -----------------------------
       # Layer 2: Dependency Vulnerability Signal
