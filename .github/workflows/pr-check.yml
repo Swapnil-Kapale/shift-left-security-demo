@@ -1,0 +1,17 @@
+name: PR Basic Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  basic-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify PR trigger
+        run: echo "PR check triggered successfully"
