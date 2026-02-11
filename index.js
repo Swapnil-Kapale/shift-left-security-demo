@@ -2,7 +2,7 @@ const express = require("express");
 const app = express();
 
 // ✅ Using environment variables for secrets
-const SECRET_TOKEN = "my-super-secret-token-1234567890"; // In production, this should come from process.env.SECRET_TOK
+const SECRET_TOKEN = process.env.SECRET_TOKEN;
 
 app.get("/secure", (req, res) => {
   const token = req.headers["x-api-token"];
@@ -23,6 +23,4 @@ app.get("/secure", (req, res) => {
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
-  // Reminder: Ensure SECRET_TOKEN is set in your environment variables, e.g.:
-  // SECRET_TOKEN="my-super-secret-token-1234567890" node index.js
 });
