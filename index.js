@@ -2,7 +2,7 @@ const express = require("express");
 const app = express();
 
 // ❌ Intentionally hardcoded secret (for demo)
-const SECRET_TOKEN = "my-super-secret-token-123";
+const SECRET_TOKEN = "my-super-secret-token-1234567890";
 
 app.get("/secure", (req, res) => {
   const token = req.headers["x-api-token"];
