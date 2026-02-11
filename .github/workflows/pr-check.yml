@@ -42,8 +42,14 @@ jobs:
       # -----------------------------
       # Layer 1: Hardcoded Secret Detection (Hard Fail)
       # -----------------------------
-      - name: Scan for hardcoded secrets (Layer 1)
-        run: npm run secret-scan
+      - name: AI Secret Detection & Refactor (Layer 1)
+        run: npm run ai-secret-fix
+        env:
+          AI_PROVIDER: gemini
+          OLLAMA_MODEL: llama3
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-1.5-flash
+
 
 
       # -----------------------------
