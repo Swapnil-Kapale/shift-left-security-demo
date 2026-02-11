@@ -39,9 +39,19 @@ jobs:
           AI_PROVIDER: gemini
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-2.5-flash
+      
+      - name: AI Injection & XSS Refactor (Layer 2)
+        id: injection
+        run: npm run ai-injection-fix
+        continue-on-error: true
+        env:
+          AI_PROVIDER: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
+
 
       - name: Commit AI Changes
-        if: steps.ai.outcome == 'failure'
+        if: steps.ai.outcome == 'failure' || steps.injection.outcome == 'failure'
         run: |
           git config user.name "shift-left-ai"
           git config user.email "ai-bot@hackathon.com"
