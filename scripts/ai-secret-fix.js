@@ -81,6 +81,7 @@ async function callGemini(prompt) {
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
           try {
+            console.log("Gemini raw response:", data);
             const parsed = JSON.parse(data);
             const text =
               parsed.candidates?.[0]?.content?.parts?.[0]?.text;
