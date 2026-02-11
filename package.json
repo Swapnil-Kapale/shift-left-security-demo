@@ -6,7 +6,8 @@
   "scripts": {
   "start": "node index.js",
   "lint": "node index.js",
-  "build": "node index.js"
+  "build": "node index.js",
+  "secret-scan": "node scripts/secret-scan.js"
   },
   "keywords": [],
   "author": "",

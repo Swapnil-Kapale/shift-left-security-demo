@@ -1,4 +1,4 @@
-name: PR Basic Check
+name: PR Shift-Left Security Pipeline
 
 on:
   pull_request:
@@ -6,12 +6,64 @@ on:
       - main
 
 jobs:
-  basic-check:
+  security-pipeline:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # -----------------------------
+      # Step 1: Checkout Code
+      # -----------------------------
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify PR trigger
-        run: echo "PR check triggered successfully"
+      # -----------------------------
+      # Step 2: Setup Node.js
+      # -----------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # -----------------------------
+      # Layer 0: Dependency Linking
+      # -----------------------------
+      - name: Install dependencies (Layer 0)
+        run: npm install
+
+      # -----------------------------
+      # Layer 0: Runtime Sanity Check
+      # -----------------------------
+      - name: Runtime sanity check (Layer 0)
+        run: |
+          echo "Starting application for sanity check..."
+          timeout 5s node index.js || true
+          echo "Sanity check completed"
+      
+      # -----------------------------
+      # Layer 1: Hardcoded Secret Detection (Hard Fail)
+      # -----------------------------
+      - name: Scan for hardcoded secrets (Layer 1)
+        run: npm run secret-scan
+
+
+      # -----------------------------
+      # Layer 2: Dependency Vulnerability Signal
+      # (Soft check – does NOT fail pipeline)
+      # -----------------------------
+      - name: Dependency vulnerability scan (signal only)
+        run: |
+          echo "Running npm audit..."
+          npm audit --json > audit-report.json || true
+          echo "Audit report generated"
+
+      # -----------------------------
+      # Placeholder: PR Comment Step
+      # (To be replaced by AI-driven analysis)
+      # -----------------------------
+      - name: Comment on PR (example placeholder)
+        run: |
+          echo "⚠️ Example PR Comment:"
+          echo "Dependency vulnerabilities detected."
+          echo "This is a placeholder message."
+          echo "In future, this step will be replaced by an AI agent"
+          echo "that summarizes vulnerabilities and suggests fixes."
