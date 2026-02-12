@@ -274,7 +274,7 @@ Consider all agent recommendations in your final output.`,
   };
 }
 
-// Run agents sequentially
+// Run agents sequentially with response chaining
 async function runAuthSecurityAgents(flaws, agents) {
   console.log("\n📋 Agent 1: Analyzing Authorization Flaws...\n");
   
@@ -283,8 +283,12 @@ async function runAuthSecurityAgents(flaws, agents) {
 Analyze these authorization flaws:
 ${JSON.stringify(flaws, null, 2)}`;
 
-  const flawAnalysis = await agents.model.generateContent(flawAnalysisPrompt);
-  console.log(flawAnalysis.response.text());
+  const flawAnalysis = await callWithRetry(async () => {
+    const result = await agents.model.generateContent(flawAnalysisPrompt);
+    return result.response.text();
+  });
+  console.log(flawAnalysis);
+  await delay(1500); // Rate limiting delay
 
   console.log("\n🔧 Agent 2: Recommending Middleware Implementations...\n");
   
@@ -293,8 +297,12 @@ ${JSON.stringify(flaws, null, 2)}`;
 Based on these flaws:
 ${JSON.stringify(flaws, null, 2)}`;
 
-  const middlewareRecommendations = await agents.model.generateContent(middlewarePrompt);
-  console.log(middlewareRecommendations.response.text());
+  const middlewareRecommendations = await callWithRetry(async () => {
+    const result = await agents.model.generateContent(middlewarePrompt);
+    return result.response.text();
+  });
+  console.log(middlewareRecommendations);
+  await delay(1500); // Rate limiting delay
 
   console.log("\n🛡️ Agent 3: Generating RBAC Patterns...\n");
   
@@ -303,30 +311,44 @@ ${JSON.stringify(flaws, null, 2)}`;
 For authorization flaws involving roles:
 ${JSON.stringify(flaws.filter(f => f.issues.some(i => i.includes("Role") || i.includes("RBAC"))), null, 2)}`;
 
-  const rbacPatterns = await agents.model.generateContent(rbacPrompt);
-  console.log(rbacPatterns.response.text());
+  const rbacPatterns = await callWithRetry(async () => {
+    const result = await agents.model.generateContent(rbacPrompt);
+    return result.response.text();
+  });
+  console.log(rbacPatterns);
+  await delay(1500); // Rate limiting delay
 
   console.log("\n✅ Agent 4: Orchestrating Complete Security Fixes...\n");
   
   const orchestratorPrompt = `${agents.fixOrchestratorInstruction}
 
-Authorization flaws: ${JSON.stringify(flaws, null, 2)}
+AGENT 1 ANALYSIS (Authorization Flaw Classification):
+${flawAnalysis}
 
-Previous analysis and recommendations have identified the issues and suggested solutions.
-Now provide the final, complete implementation strategy including:
+AGENT 2 RECOMMENDATIONS (Middleware Implementations):
+${middlewareRecommendations}
+
+AGENT 3 OUTPUT (RBAC Patterns):
+${rbacPatterns}
+
+Now synthesize all the above recommendations and provide:
 1. Priority-ordered fixes
-2. Complete code examples
+2. Complete, production-ready code examples
 3. Testing approach
-4. Deployment checklist`;
+4. Deployment checklist
+5. Security validation steps`;
 
-  const finalFixStrategy = await agents.model.generateContent(orchestratorPrompt);
-  console.log(finalFixStrategy.response.text());
+  const finalFixStrategy = await callWithRetry(async () => {
+    const result = await agents.model.generateContent(orchestratorPrompt);
+    return result.response.text();
+  });
+  console.log("\n" + finalFixStrategy);
 
   return {
-    flawAnalysis: flawAnalysis.response.text(),
-    middlewareRecommendations: middlewareRecommendations.response.text(),
-    rbacPatterns: rbacPatterns.response.text(),
-    finalFixStrategy: finalFixStrategy.response.text(),
+    flawAnalysis,
+    middlewareRecommendations,
+    rbacPatterns,
+    finalFixStrategy,
   };
 }
 
