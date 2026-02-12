@@ -126,6 +126,19 @@ function extractAuthFlaws(routes) {
   return flaws;
 }
 
+function calculateSeverity(issues, route) {
+  if (issues.some(i => i.includes("admin") || i.includes("protected"))) {
+    return "critical";
+  }
+  if (issues.some(i => i.includes("IDOR"))) {
+    return "high";
+  }
+  if (issues.some(i => i.includes("Role"))) {
+    return "high";
+  }
+  return "medium";
+}
+
 
 // ADK Tool 1: Analyze Auth Middleware
 function analyzeAuthMiddleware({ flawType, routePath }) {
