@@ -14,6 +14,28 @@ function initializeGenAI() {
   genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 }
 
+// Retry logic with exponential backoff
+async function callWithRetry(fn, maxRetries = 3, baseDelayMs = 2000) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.status === 429 && attempt < maxRetries - 1) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        console.warn(`⏳ Rate limited (429). Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+// Add delay between requests
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function scanRoutes() {
   const routes = [];
   const extensions = [".js", ".ts", ".jsx", ".tsx"];
