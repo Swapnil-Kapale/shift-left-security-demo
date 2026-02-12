@@ -153,6 +153,7 @@ Refactor the following code:
 - Do NOT change business logic
 - Keep code runnable
 - Return ONLY valid JavaScript code
+- If no refactor required state that in response
 
 File: ${filePath}
 

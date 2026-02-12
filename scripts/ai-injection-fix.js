@@ -113,6 +113,7 @@ Refactor this code to fix:
 - Do NOT change business logic
 - Keep app runnable
 - Return ONLY valid JavaScript code
+- If no refactor required state that in response
 
 File: ${filePath}
 
