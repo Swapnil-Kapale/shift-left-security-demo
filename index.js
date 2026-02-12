@@ -4,7 +4,7 @@ const app = express();
 app.use(express.json());
 
 // ❌ Hardcoded secret (already vulnerable)
-const SECRET_TOKEN = "my-super-secret-token-1234567890";
+const SECRET_TOKEN = "my-super-secret-token-1234567890wdascvd";
 
 // ----------------------------
 // ❌ 1️⃣ SQL Injection Vulnerability
