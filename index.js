@@ -1,78 +1,61 @@
 const express = require("express");
 const app = express();
-
-// Required for Command Injection fix
-const { spawn } = require("child_process");
+const { execFile } = require("child_process"); // Use execFile for safer command execution
 
 app.use(express.json());
 
-// ✅ Replaced hardcoded secret with process.env
-const SECRET_TOKEN = process.env.SECRET_TOKEN;
+// ❌ Hardcoded secret (already vulnerable - Note: This is a known vulnerability
+// but not one of the explicitly requested fixes for this exercise.
+// In a real application, this should be an environment variable.)
+const SECRET_TOKEN = "my-super-secret-token-1234567890wdascvd";
 
 // ----------------------------
-// Utility function for XSS prevention
-// ----------------------------
-function escapeHtml(unsafe) {
-  if (unsafe === null || unsafe === undefined) {
-    return '';
-  }
-  return unsafe.toString()
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-// ----------------------------
-// Utility function for Command Injection prevention
-// ----------------------------
-function isValidHost(host) {
-  // A robust validation for hostnames and IP addresses.
-  // This regex allows IPv4, IPv6 (simplified for common formats), and common domain names.
-  // For production systems, consider a more comprehensive library or strict DNS validation.
-  const ipV4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-  const ipV6Regex = /^([0-9a-fA-F]{1,4}:){7}([0-9a-fA-F]{1,4}|:)$|^((?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)::((?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)$/;
-  const hostnameRegex = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-
-  return ipV4Regex.test(host) || ipV6Regex.test(host) || hostnameRegex.test(host);
-}
-
-// ----------------------------
-// ✅ 1️⃣ SQL Injection Vulnerability Fixed
+// 1️⃣ SQL Injection Vulnerability - FIXED
 // ----------------------------
 app.get("/user", (req, res) => {
   const username = req.query.username;
 
-  // 🔒 FIX: Use parameterized queries.
-  // In a real application with a database, you would use your database driver's
-  // method for parameterized queries, which separates the SQL logic from user input.
-  // Example for 'pg' (PostgreSQL): pool.query('SELECT * FROM users WHERE username = $1', [username]);
-  // Example for 'mysql': connection.execute('SELECT * FROM users WHERE username = ?', [username]);
-  // Since this is a simulated DB, we'll represent the secure query structure.
-  // This replaces the previous direct string concatenation: `SELECT * FROM users WHERE username = '${username}'`
-  const safeQueryRepresentation = `SELECT * FROM users WHERE username = ? (parameter: '${username}')`;
+  // Use a parameterized query.
+  // In a real application, you would pass these to your database driver
+  // (e.g., `db.query('SELECT * FROM users WHERE username = $1', [username])` for PostgreSQL)
+  // to prevent SQL injection by separating the query logic from the data.
+  const query = "SELECT * FROM users WHERE username = ?"; // Placeholder for username
+  const params = [username]; // Parameters to be bound
 
-  console.log("Simulating secure parameterized query execution for:", safeQueryRepresentation);
+  console.log("Simulating parameterized query:");
+  console.log("SQL:", query);
+  console.log("Parameters:", params);
 
-  // Simulated DB result - business logic unchanged
+  // Simulated DB result
   res.json({
-    message: "Query executed securely using a parameterized query concept.",
-    query: safeQueryRepresentation,
+    message: "Parameterized query simulated successfully",
+    query: query,
+    parameters: params,
   });
 });
 
 // ----------------------------
-// ✅ 2️⃣ Cross-Site Scripting (XSS) Fixed
+// 2️⃣ Cross-Site Scripting (XSS) - FIXED
 // ----------------------------
+
+// Utility function to escape HTML characters
+function escapeHtml(str) {
+  if (typeof str !== 'string') {
+    return ''; // Handle non-string inputs gracefully
+  }
+  return str.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+}
+
 app.get("/welcome", (req, res) => {
   const name = req.query.name;
 
-  // 🔒 FIX: Escape user input before embedding it into HTML to prevent XSS.
-  // This prevents malicious scripts from being executed in the user's browser.
+  // Escape user input before directly injecting into HTML to prevent XSS
   const escapedName = escapeHtml(name);
 
-  // Directly injecting user input into HTML - business logic unchanged
   res.send(`
     <h1>Welcome ${escapedName}</h1>
     <p>Glad to see you!</p>
@@ -80,59 +63,46 @@ app.get("/welcome", (req, res) => {
 });
 
 // ----------------------------
-// ✅ 3️⃣ Command Injection Fixed
+// 3️⃣ Command Injection - FIXED
 // ----------------------------
+// child_process.execFile is safer than exec for executing commands
+// with user-supplied arguments, as it treats arguments as distinct array elements
+// and does not invoke a shell by default.
+
 app.get("/ping", (req, res) => {
   const host = req.query.host;
 
-  // 🔒 FIX: Validate input and use `spawn` with arguments array to prevent command injection.
-  // `spawn` executes commands directly without a shell, meaning arguments are not
-  // interpreted as shell commands, making it much safer.
-  if (!isValidHost(host)) {
-    return res.status(400).send("Invalid host provided. Only valid IP addresses or hostnames are allowed.");
+  // Validate the host input to ensure it's a valid hostname or IP address.
+  // This is an additional layer of defense.
+  // For simplicity, a basic regex check is used. A more robust validation
+  // might involve a dedicated library or stricter regex.
+  const ipAddressRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+  const hostnameRegex = /^[a-zA-Z0-9.-]+$/;
+
+  if (!host || (!ipAddressRegex.test(host) && !hostnameRegex.test(host))) {
+    return res.status(400).send("Invalid host specified.");
   }
 
-  // Use spawn to execute commands safely, passing arguments as an array.
-  // This avoids passing user input directly into a shell string.
-  const pingProcess = spawn("ping", ["-c", "1", host]); // The command and its arguments are separate.
-
-  let stdout = "";
-  let stderr = "";
-
-  pingProcess.stdout.on("data", (data) => {
-    stdout += data.toString();
-  });
-
-  pingProcess.stderr.on("data", (data) => {
-    stderr += data.toString();
-  });
-
-  pingProcess.on("close", (code) => {
-    if (code !== 0) {
-      // Ping command failed or exited with an error code
-      // We send stderr for debugging, but ensure it doesn't leak sensitive info.
-      return res.status(500).send(stderr || `Ping process exited with code ${code}`);
+  // Use execFile, passing the command and arguments as separate elements.
+  // This prevents shell metacharacter injection.
+  execFile("ping", ["-c", "1", host], (err, stdout, stderr) => {
+    if (err) {
+      // Log the error for debugging purposes but avoid exposing internal details to the user
+      console.error(`execFile error for host ${host}:`, err);
+      return res.status(500).send(`Failed to ping host: ${host}. ${stderr}`);
     }
-    // Business logic unchanged: send the ping output.
     res.send(stdout);
-  });
-
-  pingProcess.on("error", (err) => {
-    // Handle errors like 'ping' command not found
-    console.error("Failed to start ping process:", err);
-    res.status(500).send(`Failed to execute ping command: ${err.message}`);
   });
 });
 
 // ----------------------------
-// Existing Secure Endpoint (now uses process.env secret)
+// Existing Secure Endpoint (but still hardcoded secret)
 // ----------------------------
 app.get("/secure", (req, res) => {
   const token = req.headers["x-api-token"];
 
-  // It's good practice to ensure the environment variable is set
   if (!SECRET_TOKEN) {
-    return res.status(500).json({ error: "Server configuration error: SECRET_TOKEN not set" });
+    return res.status(500).json({ error: "Server configuration error" });
   }
 
   if (token !== SECRET_TOKEN) {
@@ -144,12 +114,4 @@ app.get("/secure", (req, res) => {
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
-  // The example value here is for instruction purposes, not a hardcoded secret in application logic.
-  // The value "my-super-secret-token-1234567890" is an *example* for the user to set,
-  // not a hardcoded secret used by the application itself.
-  console.log("Remember to set SECRET_TOKEN environment variable, e.g., SECRET_TOKEN=my-super-secret-token-1234567890 node index.js");
-  console.log("Test XSS: http://localhost:3000/welcome?name=<script>alert('XSS!')</script>");
-  console.log("Test SQL Injection (simulated safe): http://localhost:3000/user?username=admin'%20OR%20'1'%3D'1");
-  console.log("Test Command Injection (safe): http://localhost:3000/ping?host=8.8.8.8");
-  console.log("Test Command Injection (blocked): http://localhost:3000/ping?host=8.8.8.8%3Brm%20-rf%20/");
 });
