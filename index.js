@@ -50,6 +50,7 @@ app.get("/user", (req, res) => {
   // Example for 'pg' (PostgreSQL): pool.query('SELECT * FROM users WHERE username = $1', [username]);
   // Example for 'mysql': connection.execute('SELECT * FROM users WHERE username = ?', [username]);
   // Since this is a simulated DB, we'll represent the secure query structure.
+  // This replaces the previous direct string concatenation: `SELECT * FROM users WHERE username = '${username}'`
   const safeQueryRepresentation = `SELECT * FROM users WHERE username = ? (parameter: '${username}')`;
 
   console.log("Simulating secure parameterized query execution for:", safeQueryRepresentation);
@@ -68,6 +69,7 @@ app.get("/welcome", (req, res) => {
   const name = req.query.name;
 
   // 🔒 FIX: Escape user input before embedding it into HTML to prevent XSS.
+  // This prevents malicious scripts from being executed in the user's browser.
   const escapedName = escapeHtml(name);
 
   // Directly injecting user input into HTML - business logic unchanged
@@ -91,6 +93,7 @@ app.get("/ping", (req, res) => {
   }
 
   // Use spawn to execute commands safely, passing arguments as an array.
+  // This avoids passing user input directly into a shell string.
   const pingProcess = spawn("ping", ["-c", "1", host]); // The command and its arguments are separate.
 
   let stdout = "";
