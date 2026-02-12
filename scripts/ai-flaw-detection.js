@@ -1,19 +1,18 @@
 const fs = require("fs");
 const path = require("path");
-const { z } = require("zod");
-
-let LlmAgent, InMemoryRunner, FunctionTool;
-
-// Dynamic import for ESM modules
-async function initializeADK() {
-  const adkModule = await import("@google/adk");
-  LlmAgent = adkModule.LlmAgent;
-  InMemoryRunner = adkModule.InMemoryRunner;
-  FunctionTool = adkModule.FunctionTool;
-}
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+let genAI;
+
+function initializeGenAI() {
+  if (!GEMINI_API_KEY) {
+    throw new Error("Missing GEMINI_API_KEY environment variable");
+  }
+  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 function scanRoutes() {
   const routes = [];
@@ -230,97 +229,111 @@ const rbacMiddleware = (requiredRoles) => (req, res, next) => {
   return { pattern, implementation };
 }
 
-// ADK Tool 3: Generate Security Fix
-function generateSecurityFix({ flaw, fixCode, severity }) {
-  const report = `
-=== Security Fix Report ===
-Severity: ${severity.toUpperCase()}
-Flaw: ${flaw}
+// Create Specialized Authorization Agents
+async function createAuthSecurityAgents() {
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-Fixed Code:
-${fixCode}
+  return {
+    model,
+    flawAnalyzerInstruction: `You are a code security analyzer specializing in authentication flaws.
 
-Verification Checklist:
-- [ ] Authentication middleware properly validates tokens
-- [ ] Role-based access control checks are in place
-- [ ] IDOR protections verify resource ownership
-- [ ] Admin routes are protected with admin guard
-- [ ] Error messages don't leak sensitive info
-- [ ] Middleware is applied to all sensitive routes
-  `;
+Analyze the provided authorization flaws and classify each one:
+- Categorize by type: missing_auth, idor, admin_unprotected, role_bypass
+- Identify the route path and HTTP method
+- Explain the specific vulnerability
+- Estimate impact level
 
-  return { fixed: true, report };
+Be concise and technical in your analysis.`,
+    middlewareInstruction: `You are an Express.js middleware expert.
+
+Given authorization flaws, recommend specific middleware implementations:
+- Suggest JWT authentication middleware
+- Recommend IDOR protection patterns
+- Propose admin guard middleware
+- Suggest role-based access control implementations
+
+Provide working code examples for each recommendation.`,
+    rbacInstruction: `You are a security architect specializing in RBAC design.
+
+Generate role-based access control patterns:
+- Design role hierarchies
+- Define permission matrices
+- Create middleware for role enforcement
+- Provide multi-level access examples
+
+Focus on production-ready implementations.`,
+    fixOrchestratorInstruction: `You are a security fix orchestrator that coordinates multiple agents.
+
+Synthesize recommendations from other agents and provide:
+- Complete security fixes
+- Implementation priority order
+- Testing strategies
+- Deployment considerations
+
+Consider all agent recommendations in your final output.`,
+  };
 }
 
-async function runAuthSecurityAgent(flaws) {
-  // Wrap functions as ADK FunctionTools
-  const analyzeAuthMiddlewareTool = new FunctionTool({
-    name: "analyze_auth_middleware",
-    description: "Analyzes authorization middleware patterns and suggests secure implementations",
-    parameters: z.object({
-      flawType: z.enum(["missing_auth", "idor", "admin_unprotected", "role_bypass"]),
-      routePath: z.string(),
-    }),
-    execute: analyzeAuthMiddleware,
-  });
+// Run agents sequentially
+async function runAuthSecurityAgents(flaws, agents) {
+  console.log("\n📋 Agent 1: Analyzing Authorization Flaws...\n");
+  
+  const flawAnalysisPrompt = `${agents.flawAnalyzerInstruction}
 
-  const recommendRbacPatternTool = new FunctionTool({
-    name: "recommend_rbac_pattern",
-    description: "Recommends RBAC (Role-Based Access Control) patterns for routes",
-    parameters: z.object({
-      routePath: z.string(),
-      requiredRoles: z.array(z.string()),
-    }),
-    execute: recommendRbacPattern,
-  });
+Analyze these authorization flaws:
+${JSON.stringify(flaws, null, 2)}`;
 
-  const generateSecurityFixTool = new FunctionTool({
-    name: "generate_security_fix",
-    description: "Generates complete security fix code for authorization vulnerabilities",
-    parameters: z.object({
-      flaw: z.string(),
-      fixCode: z.string(),
-      severity: z.enum(["critical", "high", "medium", "low"]),
-    }),
-    execute: generateSecurityFix,
-  });
+  const flawAnalysis = await agents.model.generateContent(flawAnalysisPrompt);
+  console.log(flawAnalysis.response.text());
 
-  // Create the ADK agent
-  const agent = new LlmAgent({
-    model: GEMINI_MODEL,
-    name: "auth_security_agent",
-    instruction: `You are an application security expert specializing in authorization vulnerabilities.
+  console.log("\n🔧 Agent 2: Recommending Middleware Implementations...\n");
+  
+  const middlewarePrompt = `${agents.middlewareInstruction}
 
-Analyze the provided authorization flaws and:
-1. Use analyze_auth_middleware to identify required middleware
-2. Use recommend_rbac_pattern to suggest role-based access control
-3. Use generate_security_fix to create complete code fixes
+Based on these flaws:
+${JSON.stringify(flaws, null, 2)}`;
 
-For each vulnerability, provide:
-- Detailed vulnerability explanation
-- Middleware implementation suggestions
-- RBAC pattern recommendations
-- Complete working code examples
-- Security best practices
+  const middlewareRecommendations = await agents.model.generateContent(middlewarePrompt);
+  console.log(middlewareRecommendations.response.text());
 
-Authorization Flaws to Analyze:
-${JSON.stringify(flaws, null, 2)}
+  console.log("\n🛡️ Agent 3: Generating RBAC Patterns...\n");
+  
+  const rbacPrompt = `${agents.rbacInstruction}
 
-Analyze each flaw systematically and use all available tools to provide comprehensive security improvements.`,
-    tools: [analyzeAuthMiddlewareTool, recommendRbacPatternTool, generateSecurityFixTool],
-  });
+For authorization flaws involving roles:
+${JSON.stringify(flaws.filter(f => f.issues.some(i => i.includes("Role") || i.includes("RBAC"))), null, 2)}`;
 
-  // Run the agent
-  const runner = new InMemoryRunner();
-  const results = await runner.runAgent(agent, "Analyze all the authorization flaws and provide security fixes");
+  const rbacPatterns = await agents.model.generateContent(rbacPrompt);
+  console.log(rbacPatterns.response.text());
 
-  return results;
+  console.log("\n✅ Agent 4: Orchestrating Complete Security Fixes...\n");
+  
+  const orchestratorPrompt = `${agents.fixOrchestratorInstruction}
+
+Authorization flaws: ${JSON.stringify(flaws, null, 2)}
+
+Previous analysis and recommendations have identified the issues and suggested solutions.
+Now provide the final, complete implementation strategy including:
+1. Priority-ordered fixes
+2. Complete code examples
+3. Testing approach
+4. Deployment checklist`;
+
+  const finalFixStrategy = await agents.model.generateContent(orchestratorPrompt);
+  console.log(finalFixStrategy.response.text());
+
+  return {
+    flawAnalysis: flawAnalysis.response.text(),
+    middlewareRecommendations: middlewareRecommendations.response.text(),
+    rbacPatterns: rbacPatterns.response.text(),
+    finalFixStrategy: finalFixStrategy.response.text(),
+  };
 }
 
 (async () => {
   try {
-    // Initialize ADK modules first
-    await initializeADK();
+    // Initialize Google Generative AI
+    initializeGenAI();
 
     console.log("🔍 Scanning for authorization logic flaws...\n");
 
@@ -335,28 +348,13 @@ Analyze each flaw systematically and use all available tools to provide comprehe
     console.log(`🚨 Found ${flaws.length} potential authorization vulnerabilities:\n`);
     console.log(JSON.stringify(flaws, null, 2));
 
-    console.log("\n🤖 Initializing Google ADK Agent for security analysis...\n");
+    console.log("\n🤖 Initializing Multi-Agent Security Analysis System...\n");
 
-    const agentResults = await runAuthSecurityAgent(flaws);
+    // Create all specialized agents
+    const agents = await createAuthSecurityAgents();
 
-    // Process agent results
-    console.log("\n🧠 AI Authorization Flaw Analysis:\n");
-
-    // Extract and display agent response
-    if (agentResults && Array.isArray(agentResults)) {
-      for (const result of agentResults) {
-        if (result.content) {
-          console.log(result.content);
-        }
-        // Log tool calls if present
-        if (result.toolCalls && result.toolCalls.length > 0) {
-          console.log("\n📌 Tool Calls Executed:");
-          for (const toolCall of result.toolCalls) {
-            console.log(`  - ${toolCall.name}: ${JSON.stringify(toolCall.input)}`);
-          }
-        }
-      }
-    }
+    // Run all agents sequentially
+    const analysisResults = await runAuthSecurityAgents(flaws, agents);
 
     // Fail pipeline if critical/high severity present
     const hasHighRisk = flaws.some(f =>

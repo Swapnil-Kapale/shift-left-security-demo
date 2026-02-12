@@ -1,11 +1,20 @@
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { execSync } = require("child_process");
 
 const AI_PROVIDER = process.env.AI_PROVIDER || "gemini";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+let genAI;
+
+function initializeGenAI() {
+  if (!GEMINI_API_KEY) {
+    throw new Error("Missing GEMINI_API_KEY environment variable");
+  }
+  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 let refactorApplied = false;
 
@@ -52,50 +61,10 @@ function stripMarkdown(text) {
     .trim();
 }
 
-/* ---------------------------- */
-/* Gemini Call                  */
-/* ---------------------------- */
 async function callGemini(prompt) {
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }]
-  });
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: "generativelanguage.googleapis.com",
-        path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", chunk => (data += chunk));
-        res.on("end", () => {
-          try {
-            const parsed = JSON.parse(data);
-
-            if (!parsed.candidates) return resolve(null);
-
-            const text = parsed.candidates[0].content.parts
-              .map(p => p.text || "")
-              .join("");
-
-            resolve(stripMarkdown(text));
-          } catch (err) {
-            reject(err);
-          }
-        });
-      }
-    );
-
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+  const result = await model.generateContent(prompt);
+  return result.response.text().replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
 }
 
 /* ---------------------------- */
@@ -151,17 +120,24 @@ async function processFile(filePath) {
 /* Main                         */
 /* ---------------------------- */
 (async () => {
-  const changedFiles = getChangedFiles();
+  try {
+    initializeGenAI();
+    
+    const changedFiles = getChangedFiles();
 
-  for (const file of changedFiles) {
-    await processFile(file);
-  }
+    for (const file of changedFiles) {
+      await processFile(file);
+    }
 
-  if (refactorApplied) {
-    console.log("🔁 Injection fixes applied.");
-    process.exit(2);
-  } else {
-    console.log("✅ No injection vulnerabilities detected.");
-    process.exit(0);
+    if (refactorApplied) {
+      console.log("🔁 Injection fixes applied.");
+      process.exit(2);
+    } else {
+      console.log("✅ No injection vulnerabilities detected.");
+      process.exit(0);
+    }
+  } catch (error) {
+    console.error("❌ Error:", error.message);
+    process.exit(1);
   }
 })();

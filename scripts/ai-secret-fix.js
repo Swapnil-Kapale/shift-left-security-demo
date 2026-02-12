@@ -1,12 +1,20 @@
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { execSync } = require("child_process");
 
 const AI_PROVIDER = process.env.AI_PROVIDER || "gemini";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+let genAI;
+
+function initializeGenAI() {
+  if (!GEMINI_API_KEY) {
+    throw new Error("Missing GEMINI_API_KEY environment variable");
+  }
+  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 const SECRET_PATTERNS = [
   /SECRET/i,
@@ -53,95 +61,6 @@ function containsSecret(content) {
 }
 
 /* ------------------------ */
-/* Gemini Call              */
-/* ------------------------ */
-async function callGemini(prompt) {
-  if (!GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
-
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }]
-  });
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: "generativelanguage.googleapis.com",
-        path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", chunk => (data += chunk));
-        res.on("end", () => {
-          try {
-            const parsed = JSON.parse(data);
-            if (!parsed.candidates) return resolve(null);
-
-            const text = parsed.candidates[0].content.parts
-              .map(p => p.text || "")
-              .join("");
-
-            resolve(stripMarkdown(text));
-          } catch (err) {
-            reject(err);
-          }
-        });
-      }
-    );
-
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-/* ------------------------ */
-/* Ollama Call              */
-/* ------------------------ */
-async function callOllama(prompt) {
-  const body = JSON.stringify({
-    model: OLLAMA_MODEL,
-    prompt,
-    stream: false,
-  });
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: "host.docker.internal",
-        port: 11434,
-        path: "/api/generate",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": body.length,
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", chunk => (data += chunk));
-        res.on("end", () => {
-          try {
-            const parsed = JSON.parse(data);
-            resolve(stripMarkdown(parsed.response));
-          } catch (err) {
-            reject(err);
-          }
-        });
-      }
-    );
-
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-/* ------------------------ */
 /* AI Refactor              */
 /* ------------------------ */
 async function generateRefactor(content, filePath) {
@@ -160,8 +79,9 @@ Code:
 ${content}
 `;
 
-  if (AI_PROVIDER === "ollama") return await callOllama(prompt);
-  return await callGemini(prompt);
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+  const result = await model.generateContent(prompt);
+  return result.response.text().replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
 }
 
 /* ------------------------ */
@@ -192,22 +112,29 @@ async function processFile(filePath) {
 /* Main                     */
 /* ------------------------ */
 (async () => {
-  const changedFiles = getChangedFiles();
+  try {
+    initializeGenAI();
+    
+    const changedFiles = getChangedFiles();
 
-  if (changedFiles.length === 0) {
-    console.log("No specific changed files found, exiting.");
-    process.exit(0);
-  }
+    if (changedFiles.length === 0) {
+      console.log("No specific changed files found, exiting.");
+      process.exit(0);
+    }
 
-  for (const file of changedFiles) {
-    await processFile(file);
-  }
+    for (const file of changedFiles) {
+      await processFile(file);
+    }
 
-  if (refactorApplied) {
-    console.log("🔁 Changes applied, committing...");
-    process.exit(2); // special exit code
-  } else {
-    console.log("✅ No secrets detected.");
-    process.exit(0);
+    if (refactorApplied) {
+      console.log("🔁 Changes applied, committing...");
+      process.exit(2); // special exit code
+    } else {
+      console.log("✅ No secrets detected.");
+      process.exit(0);
+    }
+  } catch (error) {
+    console.error("❌ Error:", error.message);
+    process.exit(1);
   }
 })();
