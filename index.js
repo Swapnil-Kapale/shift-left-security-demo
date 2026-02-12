@@ -4,7 +4,8 @@ const { execFile } = require("child_process"); // Use execFile for safer command
 
 app.use(express.json());
 
-// ✅ Using environment variables for secrets
+// ✅ Using environment variables for secrets as requested
+// The SECRET_TOKEN is already correctly using process.env.SECRET_TOKEN
 const SECRET_TOKEN = process.env.SECRET_TOKEN;
 
 // ----------------------------
@@ -87,6 +88,7 @@ app.get("/ping", (req, res) => {
     if (err) {
       // Log the error for debugging purposes but avoid exposing internal details to the user
       console.error(`execFile error for host ${host}:`, err);
+      // Return a generic error message or the stderr if it's safe to expose
       return res.status(500).send(`Failed to ping host: ${host}. ${stderr}`);
     }
     res.send(stdout);
@@ -104,6 +106,7 @@ app.get("/secure", (req, res) => {
     return res.status(500).json({ error: "Server configuration error: SECRET_TOKEN not set" });
   }
 
+  // Compare the incoming token with the secret token from environment variables
   if (token !== SECRET_TOKEN) {
     return res.status(401).json({ error: "Unauthorized" });
   }
