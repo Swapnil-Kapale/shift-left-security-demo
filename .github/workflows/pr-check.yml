@@ -48,10 +48,17 @@ jobs:
           AI_PROVIDER: gemini
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-2.5-flash
-
+      
+      - name: AI Dependency Risk Intelligence (Layer 3)
+        id: dependency
+        run: npm run ai-dependency-risk
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
 
       - name: Commit AI Changes
-        if: steps.ai.outcome == 'failure' || steps.injection.outcome == 'failure'
+        if: steps.ai.outcome == 'failure' || steps.injection.outcome == 'failure' || steps.dependency.outcome == 'failure'
         run: |
           git config user.name "shift-left-ai"
           git config user.email "ai-bot@hackathon.com"
