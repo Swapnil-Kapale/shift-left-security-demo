@@ -1,7 +1,16 @@
 const fs = require("fs");
 const path = require("path");
-const { LlmAgent, InMemoryRunner, isFinalResponse, FunctionTool } = require("@google/adk");
 const { z } = require("zod");
+
+let LlmAgent, InMemoryRunner, FunctionTool;
+
+// Dynamic import for ESM modules
+async function initializeADK() {
+  const adkModule = await import("@google/adk");
+  LlmAgent = adkModule.LlmAgent;
+  InMemoryRunner = adkModule.InMemoryRunner;
+  FunctionTool = adkModule.FunctionTool;
+}
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -308,20 +317,23 @@ Analyze each flaw systematically and use all available tools to provide comprehe
 }
 
 (async () => {
-  console.log("🔍 Scanning for authorization logic flaws...\n");
-
-  const routes = scanRoutes();
-  const flaws = extractAuthFlaws(routes);
-
-  if (flaws.length === 0) {
-    console.log("✅ No authorization flaws detected.");
-    process.exit(0);
-  }
-
-  console.log(`🚨 Found ${flaws.length} potential authorization vulnerabilities:\n`);
-  console.log(JSON.stringify(flaws, null, 2));
-
   try {
+    // Initialize ADK modules first
+    await initializeADK();
+
+    console.log("🔍 Scanning for authorization logic flaws...\n");
+
+    const routes = scanRoutes();
+    const flaws = extractAuthFlaws(routes);
+
+    if (flaws.length === 0) {
+      console.log("✅ No authorization flaws detected.");
+      process.exit(0);
+    }
+
+    console.log(`🚨 Found ${flaws.length} potential authorization vulnerabilities:\n`);
+    console.log(JSON.stringify(flaws, null, 2));
+
     console.log("\n🤖 Initializing Google ADK Agent for security analysis...\n");
 
     const agentResults = await runAuthSecurityAgent(flaws);
