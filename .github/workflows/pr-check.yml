@@ -57,8 +57,16 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-2.5-flash
 
+      - name: AI Authorization Flaw Detection (Layer 4)
+        id: auth-flaws
+        run: npm run ai-flaw-detection
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
+
       - name: Commit AI Changes
-        if: steps.ai.outcome == 'failure' || steps.injection.outcome == 'failure' || steps.dependency.outcome == 'failure'
+        if: steps.ai.outcome == 'failure' || steps.injection.outcome == 'failure' || steps.dependency.outcome == 'failure' || steps.auth-flaws.outcome == 'failure'
         run: |
           git config user.name "shift-left-ai"
           git config user.email "ai-bot@hackathon.com"
