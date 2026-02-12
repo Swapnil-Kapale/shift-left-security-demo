@@ -141,6 +141,7 @@ app.get("/secure", (req, res) => {
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
+  // The example value here is for instruction purposes, not a hardcoded secret in application logic.
   console.log("Remember to set SECRET_TOKEN environment variable, e.g., SECRET_TOKEN=my-super-secret-token-1234567890 node index.js");
   console.log("Test XSS: http://localhost:3000/welcome?name=<script>alert('XSS!')</script>");
   console.log("Test SQL Injection (simulated safe): http://localhost:3000/user?username=admin'%20OR%20'1'%3D'1");
