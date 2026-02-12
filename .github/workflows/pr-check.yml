@@ -5,65 +5,64 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   security-pipeline:
     runs-on: ubuntu-latest
 
     steps:
-      # -----------------------------
-      # Step 1: Checkout Code
-      # -----------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # -----------------------------
-      # Step 2: Setup Node.js
-      # -----------------------------
-      - name: Setup Node.js
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      # -----------------------------
-      # Layer 0: Dependency Linking
-      # -----------------------------
-      - name: Install dependencies (Layer 0)
+      - name: Install dependencies
         run: npm install
 
-      # -----------------------------
-      # Layer 0: Runtime Sanity Check
-      # -----------------------------
-      - name: Runtime sanity check (Layer 0)
-        run: |
-          echo "Starting application for sanity check..."
-          timeout 5s node index.js || true
-          echo "Sanity check completed"
+      - name: Runtime sanity check
+        run: timeout 5s node index.js || true
+
+      - name: AI Secret Detection & Refactor
+        id: ai
+        run: npm run ai-secret-fix
+        continue-on-error: true
+        env:
+          AI_PROVIDER: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
       
-      # -----------------------------
-      # Layer 1: Hardcoded Secret Detection (Hard Fail)
-      # -----------------------------
-      - name: Scan for hardcoded secrets (Layer 1)
-        run: npm run secret-scan
+      - name: AI Injection & XSS Refactor (Layer 2)
+        id: injection
+        run: npm run ai-injection-fix
+        continue-on-error: true
+        env:
+          AI_PROVIDER: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
+      
+      - name: AI Dependency Risk Intelligence (Layer 3)
+        id: dependency
+        run: npm run ai-dependency-risk
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
-      # -----------------------------
-      # Layer 2: Dependency Vulnerability Signal
-      # (Soft check – does NOT fail pipeline)
-      # -----------------------------
-      - name: Dependency vulnerability scan (signal only)
+      - name: Commit AI Changes
+        if: steps.ai.outcome == 'failure' || steps.injection.outcome == 'failure' || steps.dependency.outcome == 'failure'
         run: |
-          echo "Running npm audit..."
-          npm audit --json > audit-report.json || true
-          echo "Audit report generated"
-
-      # -----------------------------
-      # Placeholder: PR Comment Step
-      # (To be replaced by AI-driven analysis)
-      # -----------------------------
-      - name: Comment on PR (example placeholder)
-        run: |
-          echo "⚠️ Example PR Comment:"
-          echo "Dependency vulnerabilities detected."
-          echo "This is a placeholder message."
-          echo "In future, this step will be replaced by an AI agent"
-          echo "that summarizes vulnerabilities and suggests fixes."
+          git config user.name "shift-left-ai"
+          git config user.email "ai-bot@hackathon.com"
+          git add .
+          git commit -m "🤖 AI security refactor applied"
+          git push
