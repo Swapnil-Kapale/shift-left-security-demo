@@ -4,10 +4,8 @@ const { execFile } = require("child_process"); // Use execFile for safer command
 
 app.use(express.json());
 
-// ❌ Hardcoded secret (already vulnerable - Note: This is a known vulnerability
-// but not one of the explicitly requested fixes for this exercise.
-// In a real application, this should be an environment variable.)
-const SECRET_TOKEN = "my-super-secret-token-1234567890wdascvd";
+// ✅ Using environment variables for secrets
+const SECRET_TOKEN = process.env.SECRET_TOKEN;
 
 // ----------------------------
 // 1️⃣ SQL Injection Vulnerability - FIXED
@@ -96,13 +94,14 @@ app.get("/ping", (req, res) => {
 });
 
 // ----------------------------
-// Existing Secure Endpoint (but still hardcoded secret)
+// Existing Secure Endpoint (now using environment variable for secret)
 // ----------------------------
 app.get("/secure", (req, res) => {
   const token = req.headers["x-api-token"];
 
+  // Ensure the environment variable is loaded
   if (!SECRET_TOKEN) {
-    return res.status(500).json({ error: "Server configuration error" });
+    return res.status(500).json({ error: "Server configuration error: SECRET_TOKEN not set" });
   }
 
   if (token !== SECRET_TOKEN) {
