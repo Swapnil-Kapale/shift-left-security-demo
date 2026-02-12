@@ -16,6 +16,28 @@ function initializeGenAI() {
   genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 }
 
+// Retry logic with exponential backoff
+async function callWithRetry(fn, maxRetries = 3, baseDelayMs = 2000) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.status === 429 && attempt < maxRetries - 1) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        console.warn(`⏳ Rate limited (429). Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+// Add delay between requests
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 const SECRET_PATTERNS = [
   /SECRET/i,
   /TOKEN/i,
@@ -79,9 +101,11 @@ Code:
 ${content}
 `;
 
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-  const result = await model.generateContent(prompt);
-  return result.response.text().replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+  return await callWithRetry(async () => {
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const result = await model.generateContent(prompt);
+    return result.response.text().replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+  });
 }
 
 /* ------------------------ */
@@ -122,8 +146,12 @@ async function processFile(filePath) {
       process.exit(0);
     }
 
-    for (const file of changedFiles) {
-      await processFile(file);
+    for (let i = 0; i < changedFiles.length; i++) {
+      await processFile(changedFiles[i]);
+      // Add delay between files to avoid rate limiting
+      if (i < changedFiles.length - 1) {
+        await delay(1500);
+      }
     }
 
     if (refactorApplied) {
